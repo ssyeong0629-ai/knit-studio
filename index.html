@@ -18,7 +18,12 @@
             --tracker-color: #2ecc71;
         }
 
-        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        * { 
+            box-sizing: border-box; 
+            outline: none; 
+            -webkit-tap-highlight-color: transparent; 
+        }
+        
         body {
             margin: 0; padding: 0;
             display: flex;
@@ -26,7 +31,10 @@
             background-color: var(--soft-bg);
             height: 100vh; overflow: hidden;
             color: #333;
+            /* 아이패드 제스처 방지 */
             touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         /* --- Sidebar --- */
@@ -123,7 +131,14 @@
         }
 
         .canvas-container { position: relative; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        #grid-board { display: grid; background: white; user-select: none; border: 1px solid #ccc; touch-action: none; position: relative; }
+        #grid-board { 
+            display: grid; 
+            background: white; 
+            user-select: none; 
+            border: 1px solid #ccc; 
+            touch-action: none; 
+            position: relative; 
+        }
         .cell { width: var(--cell-size); height: var(--cell-size); box-sizing: border-box; position: relative; }
 
         /* Row Highlight */
@@ -313,7 +328,6 @@
         </div>
     </main>
 
-    <!-- Image Convert Modal -->
     <div class="modal-overlay" id="image-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -371,15 +385,12 @@
         const previewCanvas = document.getElementById('convert-preview-canvas');
 
         function init() { 
-            createGrid(true); // 처음엔 초기화 필요
+            createGrid(true);
             renderPalette(); 
             bindEvents(); 
             saveHistory(); 
         }
 
-        /**
-         * @param {boolean} resetData - true면 모든 칸을 흰색으로 초기화, false면 색상은 유지하고 눈금만 재설정
-         */
         function createGrid(resetData = false) {
             state.w = parseInt(document.getElementById('canvas-w').value) || 30;
             state.h = parseInt(document.getElementById('canvas-h').value) || 30;
@@ -404,7 +415,6 @@
 
             board.style.gridTemplateColumns = `repeat(${state.w}, var(--cell-size))`;
             
-            // 기존 데이터를 보관했다가 재활용하거나 새로 만듦
             const existingCells = Array.from(board.children);
             board.innerHTML = '';
             
@@ -412,16 +422,18 @@
                 const cell = document.createElement('div');
                 cell.className = 'cell'; 
                 
-                // 데이터 유지 로직
                 if (!resetData && existingCells[i]) {
                     cell.style.backgroundColor = existingCells[i].style.backgroundColor;
                 } else {
                     cell.style.backgroundColor = '#ffffff';
                 }
                 
+                // 마우스 이벤트
                 cell.onmousedown = (e) => onStart(e, i);
                 cell.onmouseenter = (e) => onEnter(e, i);
+                // 터치 이벤트 (기본 동작 방지 필수)
                 cell.addEventListener('touchstart', (e) => { e.preventDefault(); onStart(e, i); }, {passive: false});
+                
                 board.appendChild(cell);
             }
             updateGridStyle();
@@ -479,6 +491,7 @@
 
         function onStart(e, idx) {
             if (state.isPasting) { pasteAt(idx); return; }
+            
             if (state.tool === 'select' || state.tool === 'move') {
                 if (state.tool === 'move' && state.selection) {
                     copy(); deleteSelection(); startPaste(); return;
@@ -487,17 +500,22 @@
                 state.startPos = { x: idx % state.w, y: Math.floor(idx / state.w) };
                 state.selection = null; selectionBox.style.display = 'none'; return;
             }
+            
             if (state.tool === 'fill') { floodFill(idx, board.children[idx].style.backgroundColor, state.color); saveHistory(); return; }
+            
             if (state.tool === 'picker') {
                 state.color = rgbToHexStr(board.children[idx].style.backgroundColor);
                 updateColorUI(); state.tool = 'pen'; updateToolUI(); renderPalette(); return;
             }
+            
             if (state.tool === 'replace') {
                 const targetColor = board.children[idx].style.backgroundColor;
                 replaceColor(targetColor, hexToRgbStr(state.color));
                 saveHistory(); return;
             }
-            state.drawing = true; paint(idx);
+
+            state.drawing = true; 
+            paint(idx);
         }
 
         function onEnter(e, idx) {
@@ -507,6 +525,7 @@
                 return;
             }
             if (!state.drawing) return;
+            
             if (state.tool === 'select') {
                 const curX = idx % state.w, curY = Math.floor(idx / state.w);
                 const x = Math.min(state.startPos.x, curX), y = Math.min(state.startPos.y, curY);
@@ -515,7 +534,9 @@
                 selectionBox.style.display = 'block';
                 selectionBox.style.left = x * 24 + 'px'; selectionBox.style.top = y * 24 + 'px';
                 selectionBox.style.width = w * 24 + 'px'; selectionBox.style.height = h * 24 + 'px';
-            } else paint(idx);
+            } else {
+                paint(idx);
+            }
         }
 
         function paint(idx) {
@@ -593,8 +614,6 @@
                 chip.style.backgroundColor = c;
                 
                 chip.onclick = () => { state.color = c; updateColorUI(); renderPalette(); };
-                
-                // 우클릭으로 삭제
                 chip.oncontextmenu = (e) => {
                     e.preventDefault();
                     state.palette.splice(idx, 1);
@@ -682,16 +701,43 @@
         function toast(m) { const t = document.getElementById('toast'); t.innerText = m; t.style.opacity = 1; setTimeout(() => t.style.opacity = 0, 2000); }
 
         function bindEvents() {
-            window.addEventListener('mouseup', () => { if(state.drawing) saveHistory(); state.drawing = false; });
+            // 전역 마우스/터치 종료 처리
+            const endAction = () => { 
+                if(state.drawing) saveHistory(); 
+                state.drawing = false; 
+            };
+            window.addEventListener('mouseup', endAction);
+            window.addEventListener('touchend', endAction);
+
+            // [추가] 터치 드래그 추적 로직 (아이패드 핵심 수정사항)
+            document.addEventListener('touchmove', (e) => {
+                if (!state.drawing || state.isPasting) return;
+                
+                // 줌이나 스크롤 방지
+                e.preventDefault();
+
+                const touch = e.touches[0];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                if (target && target.classList.contains('cell')) {
+                    const cells = Array.from(board.children);
+                    const idx = cells.indexOf(target);
+                    
+                    if (state.tool === 'select') {
+                        onEnter(e, idx);
+                    } else {
+                        paint(idx);
+                    }
+                }
+            }, { passive: false });
+
             document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.onclick = () => { state.tool = b.dataset.tool; updateToolUI(); });
-            
             document.getElementById('zoom-slider').oninput = (e) => { state.zoom = parseFloat(e.target.value); updateZoom(); };
             
-            // 강조선 단위 Enter 입력 시에만 갱신
             document.getElementById('grid-step').onkeydown = (e) => { 
                 if (e.key === 'Enter') {
                     createGrid(false); 
-                    toast(`${state.gridStep}단위 강조선 적용`);
+                    toast(`${document.getElementById('grid-step').value}단위 강조선 적용`);
                 }
             };
             
@@ -762,7 +808,6 @@
             document.getElementById('btn-modal-cancel').onclick = () => imageModal.style.display = 'none';
             document.getElementById('btn-modal-apply').onclick = applyConvertedImage;
 
-            // 도안 저장 - 그리드 포함
             document.getElementById('btn-export').onclick = () => {
                 const cellSize = 20;
                 const canvas = document.createElement('canvas'); 
@@ -777,25 +822,20 @@
                     const x = i % state.w;
                     const y = Math.floor(i / state.w);
                     
-                    // 1. 칸 색상 칠하기
                     ctx.fillStyle = cell.style.backgroundColor;
                     ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
                     
-                    // 2. 그리드 선 칠하기
                     ctx.beginPath();
-                    // 기본 우측 선
                     ctx.strokeStyle = gridBasic;
                     ctx.lineWidth = 1;
                     ctx.moveTo((x + 1) * cellSize, y * cellSize);
                     ctx.lineTo((x + 1) * cellSize, (y + 1) * cellSize);
                     ctx.stroke();
 
-                    // 기본 하단 선
                     ctx.moveTo(x * cellSize, (y + 1) * cellSize);
                     ctx.lineTo((x + 1) * cellSize, (y + 1) * cellSize);
                     ctx.stroke();
 
-                    // 강조선 (우측)
                     if ((x + 1) % step === 0 && (x + 1) !== state.w) {
                         ctx.strokeStyle = gridBold;
                         ctx.lineWidth = 2;
@@ -804,7 +844,6 @@
                         ctx.lineTo((x + 1) * cellSize, (y + 1) * cellSize);
                         ctx.stroke();
                     }
-                    // 강조선 (하단)
                     if ((y + 1) % step === 0 && (y + 1) !== state.h) {
                         ctx.strokeStyle = gridBold;
                         ctx.lineWidth = 2;
